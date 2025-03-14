@@ -1,0 +1,92 @@
+module AMBA_APB(P_clk, P_rst, P_addr, P_selx, P_enable, P_write, P_wdata, P_ready, P_slverr, P_rdata);
+  
+  // Input declaration
+  input P_clk;
+  input P_rst;
+  input [31:0] P_addr;
+  input P_selx;
+  input P_enable;
+  input P_write;
+  input [31:0] P_wdata;
+
+  // Output declaration
+  output reg P_ready;
+  output reg P_slverr;
+  output reg [31:0] P_rdata;
+
+  // Memory declaration (32x32-bit memory)
+  reg [31:0] mem[31:0];
+
+  // State declarations
+  parameter [1:0] idle = 2'b00;
+  parameter [1:0] setup = 2'b01;
+  parameter [1:0] access = 2'b10;
+
+  // Present state and next state declarations
+  reg [1:0] present_state, next_state;
+
+  // Sequential block for present state logic
+  always @(posedge P_clk or posedge P_rst) begin
+    if (P_rst)
+      present_state <= idle;
+    else
+      present_state <= next_state;
+  end
+
+  // Combinational block for next state logic
+  always @(*) begin
+    case (present_state)
+      idle: begin
+        if (P_selx & !P_enable)  // Only when P_selx is active and P_enable is low, move to setup
+          next_state = setup;
+        else
+          next_state = idle;
+      end
+
+      setup: begin
+        if (!P_enable | !P_selx)  // If P_enable goes low or P_selx goes inactive, go back to idle
+          next_state = idle;
+        else if (P_enable)        // Once P_enable is active, transition to access
+          next_state = access;
+      end
+
+      access: begin
+        if (!P_enable | !P_selx)  // After transaction is done, return to idle
+          next_state = idle;
+        else
+          next_state = access;    // Stay in access until P_enable goes low
+      end
+
+      default: next_state = idle;
+    endcase
+  end
+
+  // Sequential block for output logic
+  always @(posedge P_clk) begin
+    case (present_state)
+      idle: begin
+        P_ready = 0;             // Set P_ready low in idle state
+        P_slverr = 0;            // Clear any previous errors
+      end
+
+      setup: begin
+        P_ready = 0;             // In setup, P_ready should remain low
+        P_slverr = 0;            // No error at this stage
+      end
+
+      access: begin
+        if (P_write) begin       // Write operation
+          mem[P_addr] = P_wdata; // Write data to memory
+          P_ready = 1;           // Transaction is ready
+          P_slverr = 0;          // No error
+        end
+        else begin               // Read operation
+          P_rdata = mem[P_addr]; // Read data from memory
+          P_ready = 1;           // Transaction is ready
+          P_slverr = 0;          // No error
+        end
+      end
+    endcase
+  end
+
+endmodule
