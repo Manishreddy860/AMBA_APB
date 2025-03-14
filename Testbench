@@ -1,0 +1,111 @@
+`timescale 1ns / 1ps
+module APB_tb;
+  // Input configuration
+  reg P_clk;
+  reg P_rst;
+  reg [31:0] P_addr;
+  reg P_selx;
+  reg P_enable;
+  reg P_write;
+  reg [31:0] P_wdata;
+
+  // Output configuration
+  wire P_ready;
+  wire P_slverr;
+  wire [31:0] P_rdata;
+
+  // Instantiate the DUT (Device Under Test)
+  AMBA_APB dut(
+    .P_clk(P_clk),
+    .P_rst(P_rst),
+    .P_addr(P_addr),
+    .P_selx(P_selx),
+    .P_enable(P_enable),
+    .P_write(P_write),
+    .P_wdata(P_wdata),
+    .P_ready(P_ready),
+    .P_slverr(P_slverr),
+    .P_rdata(P_rdata)
+  );
+
+  // Clock generation
+  always #5 P_clk = ~P_clk;
+
+  // Task: Initialization
+  task initialization;
+    begin
+      P_clk = 0;
+      P_rst = 0;
+      P_addr = 0;
+      P_selx = 0;
+      P_enable = 0;
+      P_write = 0;
+      P_wdata = 0;
+    end
+  endtask
+
+  // Task: Reset
+  task reset;
+    begin
+      P_rst = 1;
+      #10 P_rst = 0;
+    end
+  endtask
+
+  // Task: Write Operation
+  task write(input [31:0] addr, input [31:0] data);
+    begin
+      @(posedge P_clk);
+      P_selx = 1;
+      P_write = 1;
+      P_addr = addr;
+      P_wdata = data;
+
+      @(posedge P_clk);
+      P_enable = 1;
+      
+      @(posedge P_clk);
+      P_enable = 0;
+      P_selx = 0;
+
+      @(posedge P_clk);
+      $display("Write: Data = %0d at Address = %0d", data, addr);
+    end
+  endtask
+
+  // Task: Read Operation
+  task read(input [31:0] addr);
+    begin
+      @(posedge P_clk);
+      P_selx = 1;
+      P_write = 0;
+      P_addr = addr;
+
+      @(posedge P_clk);
+      P_enable = 1;
+
+      @(posedge P_clk);
+      P_enable = 0;
+      P_selx = 0;
+
+      @(posedge P_clk);
+      $display("Read: Data = %0d from Address = %0d", P_rdata, addr);
+    end
+  endtask
+
+  // Test Sequence
+  initial begin
+    initialization;   // Initialize inputs
+    reset;            // Apply reset
+
+    // Test: Write and Read Sequence
+    write(0, 32'hA5A5A5A5);   // Write data to address 0
+    write(1, 32'h5A5A5A5A);   // Write data to address 1
+
+    read(0);   // Read from address 0
+    read(1);   // Read from address 1
+
+    #50 $finish;
+  end
+
+endmodule
